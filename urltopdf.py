@@ -5,7 +5,8 @@ import os
 import re
 import subprocess
 import sys
-from urllib.parse import urlparse
+import urllib.parse
+import urllib.request
 
 
 def urltopdf(filename, outdir, chrome_bin_path):
@@ -54,7 +55,7 @@ def urltopdf(filename, outdir, chrome_bin_path):
             continue
 
         # Remove '/' from the end and take take last part of the url.
-        url_target = urlparse(url).path.strip("/").split("/")[-1]
+        url_target = urllib.parse.urlparse(url).path.strip("/").split("/")[-1]
         # Replace all non alphanumeric characters with underscore.
         fname = "".join([ch if ch.isalnum() else "_" for ch in url_target])
         fname += "_"
@@ -67,6 +68,21 @@ def urltopdf(filename, outdir, chrome_bin_path):
         print(f"Downloading and converting: {url}")
         success = False
         try:
+            # Try to open the URL first as chrome won't return an error,
+            # if the URL is not found.
+
+            # Spoof the user agent as otherwise some servers
+            # do not serve files correctly and return 403.
+            req = urllib.request.Request(
+                url,
+                data=None,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36"
+                }
+            )
+            # This throws if the URL can't be opened.
+            urllib.request.urlopen(req)
+
             cmd = [chrome_bin_path,
                    "--headless",
                    "--run-all-compositor-stages-before-draw",
@@ -74,11 +90,10 @@ def urltopdf(filename, outdir, chrome_bin_path):
                    f"--print-to-pdf={outputfile}",
                    f"{url}"]
 
-            output = subprocess.call(cmd)
-            print(f"{cmd} out: {output}")
+            subprocess.call(cmd)
             success = True
         except Exception as e:
-            print(f"Error from Chrome: {e}. cmd {cmd}")
+            print(f"Error fetching URL ({url}): {e}.")
 
         if success:
             # Update metadata if the download succeeded
